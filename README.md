@@ -33,25 +33,42 @@ npm install
 
 ## Environment Variables
 
-Create `.env` or `.env.local` files based on `.env.example` in the root directory:
+A single, unified `.env` file in the root directory is used across all services (`server`, `agent`, and `frontend`). To set up your environment, copy `.env.example` in the root directory to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Environment variables configured in `.env`:
 
 ```env
-LIVEKIT_URL=
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
-DEEPGRAM_API_KEY=
-GOOGLE_API_KEY=
-CARTESIA_API_KEY=
+# LiveKit Server Configuration
+LIVEKIT_URL=wss://<project-subdomain>.livekit.cloud
+LIVEKIT_API_KEY=<your_livekit_api_key>
+LIVEKIT_API_SECRET=<your_livekit_api_secret>
+
+# Express Token Server Configuration
 PORT=4000
+
+# AI Agent Service API Keys
+DEEPGRAM_API_KEY=<your_deepgram_api_key>
+GOOGLE_API_KEY=<your_google_api_key>
+CARTESIA_API_KEY=<your_cartesia_api_key>
+
+# Frontend Configuration
+NEXT_PUBLIC_LIVEKIT_URL=wss://<project-subdomain>.livekit.cloud
+NEXT_PUBLIC_TOKEN_SERVER_URL=http://localhost:4000
 ```
 
 - `LIVEKIT_URL`: WebSocket URL of your LiveKit server or LiveKit Cloud project.
 - `LIVEKIT_API_KEY`: API Key for authenticating with LiveKit.
 - `LIVEKIT_API_SECRET`: API Secret for signing LiveKit access tokens and agent dispatch requests.
+- `PORT`: Port number for the Express token server (defaults to 4000).
 - `DEEPGRAM_API_KEY`: API Key for Deepgram speech-to-text (STT).
 - `GOOGLE_API_KEY`: API Key for Google Gemini LLM services.
 - `CARTESIA_API_KEY`: API Key for Cartesia text-to-speech (TTS).
-- `PORT`: Port number for the Express token server (defaults to 4000).
+- `NEXT_PUBLIC_LIVEKIT_URL`: WebSocket URL exposed to the frontend browser.
+- `NEXT_PUBLIC_TOKEN_SERVER_URL`: Express token server URL for frontend API calls.
 
 ## Running the Project
 

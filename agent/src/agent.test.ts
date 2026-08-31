@@ -1,9 +1,12 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { dedent, inference, initializeLogger, voice } from '@livekit/agents';
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, it } from 'vitest';
 import { createAgent } from './agent.ts';
 
-dotenv.config({ path: '.env.local' });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: [path.resolve(__dirname, '../../.env'), path.resolve(__dirname, '../.env.local'), '.env.local', '.env'] });
 
 // Initialize logger for testing.
 // You may wish to adjust the log level to print more or less information during test runs.

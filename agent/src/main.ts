@@ -10,11 +10,13 @@ import * as google from '@livekit/agents-plugin-google';
 import * as deepgram from '@livekit/agents-plugin-deepgram';
 import * as cartesia from '@livekit/agents-plugin-cartesia';
 import * as silero from '@livekit/agents-plugin-silero';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { EgressClient, EncodedFileOutput, EncodedFileType } from 'livekit-server-sdk';
 
-dotenv.config({ path: '.env.local' });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: [path.resolve(__dirname, '../../.env'), path.resolve(__dirname, '../.env.local'), '.env.local', '.env'] });
 
 // ---- Types for the metadata the frontend/token-server sends in ----
 interface InterviewConfig {
