@@ -157,6 +157,7 @@ The AI agent manages the interview deterministically through an explicit state m
 ### STT Failure
 
 - Handled by voice activity detection (Silero VAD) and state event listeners. If speech is misheard or fails to generate text, the 10-second silence timer acts as a fallback to ask the candidate if they'd like to repeat their answer.
+- **Candidate Not Answering Timeout**: If the candidate provides no answer for 30 seconds, a `noAnswerTimer` triggers, automatically ending the interview with a status of `"Timeout (No Answer)"` and disconnecting gracefully.
 
 ### LLM Failure
 
@@ -175,11 +176,24 @@ The AI agent manages the interview deterministically through an explicit state m
 
 # Problem-Solving Question
 
-## Why is interview state tracked outside the LLM?
+**Scenario**:
+The interview has these questions:
+1. Tell me about yourself.
+2. What is your Node.js experience?
+3. Explain a difficult project you worked on.
+4. Why should we hire you?
 
-Interview state (`currentQuestionIndex`) is tracked explicitly in code outside the LLM for the following reasons:
+The candidate is answering question 2, but the LLM request fails.
 
-1. **Separation of Concerns**: The LLM's role is natural language processing and generation, while the application code controls deterministic interview logic and session state.
-2. **Deterministic Question Ordering**: Relying solely on the LLM to remember which question to ask next can lead to skipped questions, repeated questions, or hallucinated follow-ups. Explicit state guarantees questions are asked in the exact predefined sequence.
-3. **Fault Tolerance and State Preservation**: If an LLM API call fails, times out, or requires a retry, tracking `currentQuestionIndex` in code ensures the active question index is preserved. The system will retry the current question rather than blindly advancing to the next index.
-4. **Reliable Session Persistence**: Application-managed state enables accurate tracking of partial transcripts, session durations, and completion statuses (`Completed` vs. `Incomplete`) regardless of LLM context limits or network dropouts.
+**1. What should happen to the interview?**
+The interview should gracefully handle the failure without crashing or dropping the connection unexpectedly. In our implementation, a `try...catch` block around the LLM generation request prevents the agent process from crashing. The system catches the error, logs it, and attempts a fallback. If it's a fatal error (like API quota exceeded), it will politely inform the user before saving the partial transcript and ending the session.
+
+**2. Should the Agent retry the current question?**
+Yes, the Agent should retry the current question (Question 2). In our code, the catch block attempts a single retry using simplified fallback instructions (e.g., `Please ask: "<question>"`). This is effective for overcoming transient network timeouts or LLM provider blips.
+
+**3. Should it move to the next question?**
+No, it should absolutely not move to the next question. Skipping the current question would result in an incomplete evaluation. Because the state is managed safely, a failed LLM request does not increment the active question index.
+
+**4. How would you make sure the interview doesn't lose its current state?**
+We track the interview state (such as `currentQuestionIndex` and the `transcript`) explicitly in the application code (variables inside the Node.js agent worker), completely outside of the LLM. 
+Because we do not rely on the LLM to remember which question to ask next, an LLM failure has no impact on our system state. If a request fails, the application code still knows exactly that it is on index `1` (Question 2) and what the transcript is up to that point, allowing it to reliably retry or safely persist the partial session.

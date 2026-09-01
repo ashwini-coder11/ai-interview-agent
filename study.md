@@ -590,6 +590,10 @@ try {
 - **Current implementation**: Candidate speech yields no user item. 10-second silence timer (`startSilenceTimer()`) fires and prompts candidate: `"The candidate has been quiet for a moment. Gently ask if they are ready..."`
 - **Future improvement**: Add audio input level warning on UI if mic volume is too low.
 
+### 5. Candidate Not Answering Timeout
+- **What can go wrong**: Candidate remains completely silent for a prolonged period, keeping the session open unnecessarily.
+- **Current implementation**: A 30-second `noAnswerTimer` tracks silence while waiting for a response. If it expires, the interview automatically ends with the status `"Timeout (No Answer)"` and disconnects gracefully.
+- **Future improvement**: Provide a 10-second countdown visual warning in the UI before disconnecting.
 ### 5. LLM (Gemini) / TTS (Cartesia) Failure
 - **What can go wrong**: Rate limits, quota exhaustion, or service outages.
 - **Current implementation**: Wrapped in `try...catch` in `askNextQuestion()`. Retries generation once with simpler prompt without advancing `currentQuestionIndex`.
@@ -803,8 +807,11 @@ ai-interview-agent/               # Project Root Directory
 ### Error Handling Questions
 
 #### Question: What happens if the LLM call fails while processing Question 2?
-- **Short Interview Answer**: "In `agent/src/main.ts`, the call to `session.generateReply()` inside `askNextQuestion()` is wrapped in a `try...catch` block. If Gemini fails or times out, the error is caught, `currentQuestionIndex` is **not** incremented, and a single retry attempt is executed with a simple fallback prompt. This preserves the interview state without skipping Question 2."
-- **Detailed Explanation**: Refer to Section 12 & 13 (`askNextQuestion()` failure handling).
+- **Scenario**: The interview questions are: 1. Tell me about yourself. 2. What is your Node.js experience? 3. Explain a difficult project you worked on. 4. Why should we hire you? The candidate is answering question 2, but the LLM request fails.
+- **1. What should happen to the interview?** The interview should gracefully handle the failure without crashing. In our implementation, a `try...catch` block around the LLM request catches the error and logs it. If it's a fatal error (like API quota exceeded), it politely informs the user and ends the session securely.
+- **2. Should the Agent retry the current question?** Yes, the catch block attempts a single retry with simplified fallback instructions (e.g., `Please ask: "<question>"`).
+- **3. Should it move to the next question?** No, moving to the next question would result in a skipped question. Because state is managed outside the LLM, the failed request does not increment `currentQuestionIndex`.
+- **4. How would you make sure the interview doesn't lose its current state?** We track the interview state (like `currentQuestionIndex` and the `transcript`) explicitly in the Node.js application code variables, completely independent of the LLM's internal context. This ensures an LLM failure doesn't corrupt our sequence tracking.
 
 ---
 
