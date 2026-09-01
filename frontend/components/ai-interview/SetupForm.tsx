@@ -3,29 +3,31 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
+const PREDEFINED_QUESTIONS = [
+  "Tell me about yourself.",
+  "What is your experience with Node.js?",
+  "Tell me about a challenging project you worked on.",
+  "How do you handle database performance issues?"
+];
+
 export function SetupForm({ onStart }: { onStart: (data: any) => void }) {
   const [candidateName, setCandidateName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
-  const [questions, setQuestions] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const questionsList = questions
-      .split('\n')
-      .map((q) => q.trim())
-      .filter((q) => q.length > 0);
-
     try {
-      const response = await fetch(process.env.NEXT_PUBLIC_TOKEN_SERVER_URL + '/api/token', {
+      const serverUrl = process.env.NEXT_PUBLIC_TOKEN_SERVER_URL || 'http://localhost:4000';
+      const response = await fetch(`${serverUrl}/api/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           candidateName,
           jobTitle,
-          questions: questionsList,
+          questions: PREDEFINED_QUESTIONS,
         }),
       });
 
@@ -65,18 +67,6 @@ export function SetupForm({ onStart }: { onStart: (data: any) => void }) {
           onChange={(e) => setJobTitle(e.target.value)}
           placeholder="Software Engineer"
           className="flex h-10 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Interview Questions (one per line)</label>
-        <textarea
-          required
-          value={questions}
-          onChange={(e) => setQuestions(e.target.value)}
-          placeholder="What is your greatest strength?&#10;Describe a time you solved a hard bug."
-          rows={5}
-          className="flex w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
       </div>
 

@@ -16,8 +16,9 @@ export function ResultsScreen({
     // Poll the backend until results are available
     const interval = setInterval(async () => {
       try {
+        const serverUrl = process.env.NEXT_PUBLIC_TOKEN_SERVER_URL || 'http://localhost:4000';
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_TOKEN_SERVER_URL}/api/results/${roomName}`
+          `${serverUrl}/api/results/${roomName}`
         );
         const data = await res.json();
         if (data) {

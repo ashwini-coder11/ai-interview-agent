@@ -33,6 +33,7 @@ app.post('/api/token', async (req, res) => {
     await dispatchSvc.createDispatch(roomName, 'agent');
   } catch (err) {
     console.error('Failed to create room or dispatch agent:', err);
+    return res.status(500).json({ error: err.message, stack: err.stack });
   }
   
   // 3. Generate token for the frontend participant
