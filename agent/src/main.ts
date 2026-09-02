@@ -401,6 +401,7 @@ CRITICAL RULES — you must follow these without exception:
 cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
-    agentName: 'agent'
+    agentName: 'agent',
+    port: process.env.PORT ? parseInt(process.env.PORT) : 8081,
   })
 );
