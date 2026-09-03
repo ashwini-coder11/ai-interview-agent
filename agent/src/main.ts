@@ -140,16 +140,7 @@ export default defineAgent({
         resultsSaved = true;
         const durationMs = Date.now() - startedAt;
 
-        // Build the final transcript directly from the agent's full chat context
-        const finalTranscript = session.chatCtx.items
-          .filter((m: any) => m.type === 'message' && (m.role === 'user' || m.role === 'assistant'))
-          .map((m: any) => ({
-            speaker: m.role === 'assistant' ? 'ai' : 'candidate',
-            text: m.textContent || ''
-          }))
-          .filter((m: any) => m.text.trim() !== '');
-
-        console.log(`[DEBUG] Saving results: status=${status}, transcript entries=${finalTranscript.length}, durationMs=${durationMs}`);
+        console.log(`[DEBUG] Saving results: status=${status}, transcript entries=${transcript.length}, durationMs=${durationMs}`);
         try {
           await fetch(`http://localhost:4000/api/results/${ctx.room.name!}`, {
             method: 'POST',
@@ -157,7 +148,7 @@ export default defineAgent({
             body: JSON.stringify({
               candidateName,
               status,
-              transcript: finalTranscript,
+              transcript: transcript,
               durationMs,
             }),
           });
@@ -191,6 +182,19 @@ CRITICAL RULES — you must follow these without exception:
       });
 
       // 5. Capture the transcript & handle candidate answer completion
+      session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
+        if (ev.isFinal && ev.transcript && ev.transcript.trim().length > 0) {
+          console.log(`[DEBUG] Candidate transcribed speech: "${ev.transcript.trim()}"`);
+          transcript.push({
+            speaker: 'candidate',
+            text: ev.transcript.trim(),
+          });
+          if (!interviewCompleted && !isAskingQuestion) {
+            userHasSpoken = true;
+          }
+        }
+      });
+
       session.on(voice.AgentSessionEventTypes.ConversationItemAdded, async (event) => {
         if (!('role' in event.item)) return;
 
@@ -199,19 +203,12 @@ CRITICAL RULES — you must follow these without exception:
 
         console.log(`[DEBUG] conversation_item_added: role=${event.item.role}, id=${itemId}, text="${text?.substring(0, 60)}..."`);
 
-        // Store transcript for both AI and candidate messages
-        if (text) {
+        // Store transcript for AI messages
+        if (text && event.item.role === 'assistant') {
           transcript.push({
-            speaker: event.item.role === 'assistant' ? 'ai' : 'candidate',
+            speaker: 'ai',
             text,
           });
-        }
-
-        // Only record that the user has spoken (turn advancement handled by VAD EOU)
-        if (event.item.role === 'user' && !interviewCompleted && !isAskingQuestion) {
-          if (text && text.trim().length > 0) {
-            userHasSpoken = true;
-          }
         }
       });
 
@@ -237,13 +234,10 @@ CRITICAL RULES — you must follow these without exception:
           // User stopped speaking. If they actually said something, wait to confirm End-Of-Utterance
           if (userHasSpoken && !interviewCompleted && !isAskingQuestion) {
             eouTimer = setTimeout(async () => {
-              // EOU confirmed!
+              // EOU confirmed! Advance to next question directly without triggering LLM pipeline
               console.log(`[DEBUG] End of utterance detected. Advancing to next question.`);
               userHasSpoken = false;
               eouTimer = null;
-              
-              // Explicitly commit the user's spoken turn so it gets added to the transcript
-              session.commitUserTurn();
 
               currentQuestionIndex += 1;
               console.log(`[DEBUG] Advanced to question index: ${currentQuestionIndex} / ${questions.length}`);
@@ -312,18 +306,15 @@ CRITICAL RULES — you must follow these without exception:
             // All configured questions have been asked and answered
             interviewCompleted = true;
             clearSilenceTimer();
-            console.log('[DEBUG] All questions answered, generating closing message');
+            console.log('[DEBUG] All questions answered, speaking closing message');
 
-            await session.generateReply({
-              instructions: `Thank ${candidateName} warmly for their time and let them know the interview is complete. Wish them the best! Do not ask any more questions.`,
-            });
+            await session.say(
+              `Thank you ${candidateName} for your time! The interview is now complete. We wish you the best of luck!`
+            );
 
             // Wait for the closing message to be spoken, then save and disconnect.
-            // We use a timer to allow the TTS to finish playing the closing message
-            // and for the ConversationItemAdded event to capture it in the transcript.
             setTimeout(async () => {
               await saveResults('Completed');
-              // Give a brief moment for the save to persist, then disconnect
               setTimeout(async () => {
                 try {
                   const roomName = ctx.room.name!;
@@ -338,39 +329,33 @@ CRITICAL RULES — you must follow these without exception:
                   console.error('Error during disconnect', e);
                 }
               }, 2000);
-            }, 6000); // 6s for TTS to finish speaking the closing message
+            }, 4000);
 
             return;
           }
 
           const question = questions[currentQuestionIndex];
-          console.log(`[DEBUG] Asking question ${currentQuestionIndex}: "${question}"`);
+          console.log(`[DEBUG] Asking question ${currentQuestionIndex + 1}/${questions.length}: "${question}"`);
 
           if (currentQuestionIndex === 0) {
-            await session.generateReply({
-              instructions: `Greet ${candidateName} warmly for the ${jobTitle} interview, then ask this exact question: "${question}". Do not add any other questions — ask only this one and then stop.`,
-            });
+            await session.say(
+              `Hi ${candidateName}! Welcome to your ${jobTitle} interview, it's great to meet you today. To get started, ${question}`
+            );
           } else {
-            await session.generateReply({
-              instructions: `Give a brief, natural one-sentence acknowledgment of the candidate's previous answer, then ask this exact question: "${question}". Do not add any follow-up questions or additional questions — ask only this one and then stop.`,
-            });
+            await session.say(
+              `Thanks for sharing that. Next question: ${question}`
+            );
           }
         } catch (err) {
-          // LLM/TTS failure handling: retry once, preserve interview state
+          // LLM/TTS failure handling: retry once
           console.error('Failed to ask question, retrying once...', err);
           try {
             const question = questions[currentQuestionIndex];
             if (question) {
-              await session.generateReply({ instructions: `Please ask: "${question}"` });
+              await session.say(`Next question: ${question}`);
             }
           } catch (retryErr) {
-            console.error('Retry also failed, moving on', retryErr);
-            // If the LLM is completely failing (e.g. 429 Quota Exceeded), tell the user.
-            try {
-              await session.say("I'm sorry, but I'm having trouble connecting to my brain right now. The API quota might be exceeded. Please wait a moment and try again.", { allowInterruptions: false });
-            } catch (sayErr) {
-              console.error('TTS error fallback failed', sayErr);
-            }
+            console.error('Retry also failed', retryErr);
           }
         } finally {
           isAskingQuestion = false;
@@ -402,6 +387,6 @@ cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
     agentName: 'agent',
-    port: process.env.PORT ? parseInt(process.env.PORT) : 8081,
+    port: process.env.AGENT_PORT ? parseInt(process.env.AGENT_PORT) : 8081,
   })
 );
